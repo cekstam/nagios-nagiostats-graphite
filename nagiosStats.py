@@ -1,5 +1,6 @@
-#!/usr/bin/python
+#!/usr/bin/python2.6
 from subprocess import Popen, PIPE
+from apscheduler.schedulers.background import BlockingScheduler
 import time
 import socket
 import datetime
@@ -81,26 +82,37 @@ stats = {
 }
 
 def collectStats():
-    carbonServer = "localhost"
-    carbonPort = 2004
-    sock = socket.socket()
-    sock.connect((carbonServer, carbonPort))
-    tuples = ([])
-    binary = "/usr/local/nagios/bin/nagiostats"
+    carbonServer = "80.72.15.73"
+    carbonPort = 2003
+    calltime = int(time.time())
+    try:
+      sock = socket.socket()
+      sock.connect((carbonServer, carbonPort))
+    except socket.error, err:
+      print "Could not connect to %s:%s, error code %s, %s" % ( carbonServer, carbonPort, err[0], err[1] )
+      return 127
+    binary = "/opt/nagios/bin/nagiostats"
+    stat = ','.join(unicode(i) for i in stats)
+    command = binary + " --mrtg --data=" + stat
+    nagprocess = Popen(command, shell=True, stderr=PIPE, stdout=PIPE, universal_newlines=True)
+    stdout, stderr = nagprocess.communicate()
+    stdout = stdout.splitlines()
     for stat, metaData in stats.items():
         metricName, descr = metaData
-        command = binary + " --mrtg --data=" + stat
-        nagprocess = Popen(command, shell=True, stderr=PIPE, stdout=PIPE, universal_newlines=True)
-        stdout, stderr = nagprocess.communicate()
-        stdout = stdout.splitlines()
         metricValue = stdout[0]
-        tuples.append(('nagios.%s.%s' % (hostname, metricName), (int(time.time()), metricValue)))
-    package = pickle.dumps(tuples, 1)
-    size = struct.pack('!L', len(package))
-    sock.sendall(size)
-    sock.sendall(package)
-
+        del stdout[0]
+        string = 'datacenter.stats.nagios.%s.%s %i %s' % (hostname, metricName, calltime, metricValue)
+        sock.send(string)
+        print "%s" % string
+    sock.close()
 
 
 if __name__ == "__main__":
-    collectStats()
+
+  sched = BlockingScheduler()
+  sched.add_job(collectStats, 'interval',  seconds=10)
+  ret = collectStats()
+  try:
+    sched.start()
+  except (KeyboardInterrupt, SystemExit):
+    pass
