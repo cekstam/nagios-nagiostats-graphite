@@ -101,7 +101,7 @@ def collectStats():
         metricName, descr = metaData
         metricValue = stdout[0]
         del stdout[0]
-        string = 'datacenter.stats.nagios.%s.%s %i %s' % (hostname, metricName, calltime, metricValue)
+        string = 'datacenter.stats.nagios.%s.%s %s %i' % (hostname, metricName, metricValue, calltime)
         sock.send(string)
         print "%s" % string
     sock.close()
